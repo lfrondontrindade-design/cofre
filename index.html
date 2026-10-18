@@ -1,0 +1,1983 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cofre</title>
+<meta name="theme-color" content="#FFFFFF">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cofre">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" href="icon-192.png" sizes="192x192" type="image/png">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100%; }
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    background-color: #F7F8FA;
+    background-image:
+      radial-gradient(circle at 15% -10%, rgba(29,78,216,0.05), transparent 55%),
+      radial-gradient(circle at 85% 0%, rgba(29,78,216,0.04), transparent 50%);
+    background-attachment: fixed;
+  }
+  #root { min-height: 100%; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .glass {
+    background: #0A1C3F;
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow: 0 1px 2px rgba(10,20,40,0.15), 0 10px 24px rgba(10,20,40,0.25);
+    position: relative;
+  }
+  .glass-soft {
+    background: #FFFFFF;
+    border: 1px solid #E2E8F0;
+  }
+  .ticked::before, .ticked::after,
+  .ticked .tick-br::before, .ticked .tick-br::after { content: ""; position: absolute; width: 9px; height: 9px; pointer-events: none; }
+  .ticked { position: relative; }
+  .ticked::before { top: -1px; left: -1px; border-top: 1.5px solid rgba(255,255,255,0.55); border-left: 1.5px solid rgba(255,255,255,0.55); }
+  .ticked::after { bottom: -1px; right: -1px; border-bottom: 1.5px solid rgba(255,255,255,0.55); border-right: 1.5px solid rgba(255,255,255,0.55); }
+</style>
+<script src="https://cdn.tailwindcss.com/3.4.10"></script>
+</head>
+<body>
+<div id="root">
+  <div style="background:#F7F8FA;width:100%;min-height:100vh;display:flex;align-items:center;justify-content:center;">
+    <p style="font-family:ui-monospace,monospace;font-size:13px;letter-spacing:0.1em;color:#0A1C3F;">CARREGANDO O ARQUIVO…</p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+<script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+<script type="text/babel" data-presets="react">
+const { useState, useEffect, useCallback, useRef } = React;
+
+/* ---------------------------------------------------------------
+   Ícones — SVG próprios (sem dependência externa) no estilo
+   outline fino, pra não depender de nenhum CDN de ícones.
+--------------------------------------------------------------- */
+function Icon({ size = 14, color, style, className, children }) {
+  const stroke = color || (style && style.color) || "currentColor";
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke}
+      strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={style} className={className}>
+      {children}
+    </svg>
+  );
+}
+const Search = (p) => <Icon {...p}><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></Icon>;
+const Plus = (p) => <Icon {...p}><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></Icon>;
+const Lock = (p) => <Icon {...p}><rect x="3" y="11" width="18" height="11" rx="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" /></Icon>;
+const Eye = (p) => <Icon {...p}><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" /><circle cx="12" cy="12" r="3" /></Icon>;
+const EyeOff = (p) => <Icon {...p}><path d="M17.94 17.94A10.94 10.94 0 0 1 12 19c-7 0-11-7-11-7a18.5 18.5 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 5c7 0 11 7 11 7a18.5 18.5 0 0 1-2.16 3.19" /><line x1="1" y1="1" x2="23" y2="23" /></Icon>;
+const Trash2 = (p) => <Icon {...p}><polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /><line x1="10" y1="11" x2="10" y2="17" /><line x1="14" y1="11" x2="14" y2="17" /></Icon>;
+const Pencil = (p) => <Icon {...p}><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></Icon>;
+const Download = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></Icon>;
+const Upload = (p) => <Icon {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="17 8 12 3 7 8" /><line x1="12" y1="3" x2="12" y2="15" /></Icon>;
+const ExternalLink = (p) => <Icon {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><polyline points="15 3 21 3 21 9" /><line x1="10" y1="14" x2="21" y2="3" /></Icon>;
+const FolderPlus = (p) => <Icon {...p}><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /><line x1="12" y1="11" x2="12" y2="17" /><line x1="9" y1="14" x2="15" y2="14" /></Icon>;
+const X = (p) => <Icon {...p}><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></Icon>;
+const Copy = (p) => <Icon {...p}><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></Icon>;
+const Check = (p) => <Icon {...p}><polyline points="20 6 9 17 4 12" /></Icon>;
+const ShieldCheck = (p) => <Icon {...p}><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /><polyline points="9 12 11 14 15 10" /></Icon>;
+const Tag = (p) => <Icon {...p}><path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" /><circle cx="7" cy="7" r="1" /></Icon>;
+const Clock = (p) => <Icon {...p}><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></Icon>;
+const BookmarkPlus = (p) => <Icon {...p}><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h5" /><line x1="19" y1="3" x2="19" y2="9" /><line x1="16" y1="6" x2="22" y2="6" /></Icon>;
+const ClipboardCopy = (p) => <Icon {...p}><rect x="8" y="2" width="8" height="4" rx="1" /><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" /><rect x="9" y="13" width="6" height="6" rx="1" /></Icon>;
+const ArrowUpDown = (p) => <Icon {...p}><path d="M3 8l4-4 4 4" /><path d="M7 4v16" /><path d="M21 16l-4 4-4-4" /><path d="M17 20V4" /></Icon>;
+const Inbox = (p) => <Icon {...p}><path d="M22 12h-6l-2 3h-4l-2-3H2" /><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" /></Icon>;
+const ChevronDown = (p) => <Icon {...p}><polyline points="6 9 12 15 18 9" /></Icon>;
+const ChevronRight = (p) => <Icon {...p}><polyline points="9 18 15 12 9 6" /></Icon>;
+const Sparkles = (p) => <Icon {...p}><path d="M12 3l1.8 4.9L18.5 9.5l-4.7 1.6L12 16l-1.8-4.9L5.5 9.5l4.7-1.6z" /></Icon>;
+const Terminal = (p) => <Icon {...p}><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></Icon>;
+const Link2 = (p) => <Icon {...p}><path d="M9 17H7A5 5 0 0 1 7 7h2" /><path d="M15 7h2a5 5 0 1 1 0 10h-2" /><line x1="8" y1="12" x2="16" y2="12" /></Icon>;
+const Image = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="8.5" cy="8.5" r="1.5" /><polyline points="21 15 16 10 5 21" /></Icon>;
+const ImagePlus = (p) => <Icon {...p}><rect x="3" y="3" width="18" height="18" rx="2" /><circle cx="9" cy="9" r="2" /><path d="M21 15l-5-5L5 21" /></Icon>;
+const Maximize2 = (p) => <Icon {...p}><polyline points="15 3 21 3 21 9" /><polyline points="9 21 3 21 3 15" /><line x1="21" y1="3" x2="14" y2="10" /><line x1="3" y1="21" x2="10" y2="14" /></Icon>;
+const CloudOff = (p) => <Icon {...p}><path d="M22.61 16.95A5 5 0 0 0 18 9h-1.26a8 8 0 0 0-7.05-6" /><path d="M5.07 7.11A8 8 0 0 0 9 23h9.5a4.5 4.5 0 0 0 2.5-.83" /><line x1="2" y1="2" x2="22" y2="22" /></Icon>;
+const RefreshCw = (p) => <Icon {...p}><polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" /><path d="M1 14l4.64 4.36A9 9 0 0 0 20.49 15" /></Icon>;
+
+/* ---------------------------------------------------------------
+   Tokens visuais
+--------------------------------------------------------------- */
+const INK = "#102A54";
+const PANEL = "#0A1C3F";
+const PAPER = "#FFFFFF";
+const LINE = "rgba(255,255,255,0.14)";
+const BRASS = "#2F5FD9";
+const TEAL = "#C9D6EC";
+const RUST = "#E24C3D";
+const BADGE_COLORS = [BRASS, "#0891B2", RUST, "#64748B", "#7C3AED"];
+// Cores de elementos que ficam direto sobre o fundo branco da página
+// (fora dos cartões azuis) — barra de busca, filtros, chips fantasma.
+const PAGE_MUTED = "#5B6B85";
+const PAGE_LINE = "#E2E8F0";
+const PAGE_TEXT = "#0F2A52";
+const colorFor = (i) => BADGE_COLORS[i % BADGE_COLORS.length];
+
+const inputStyle = {
+  width: "100%",
+  padding: "8px 10px",
+  borderRadius: 8,
+  background: "rgba(0,0,0,0.35)",
+  border: `1px solid ${LINE}`,
+  color: PAPER,
+  fontSize: 13,
+  outline: "none",
+};
+
+function FontImport() {
+  return (
+    <style>{`
+      @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap');
+    `}</style>
+  );
+}
+
+/* ---------------------------------------------------------------
+   Criptografia local (AES-GCM + PBKDF2) — as senhas nunca são
+   gravadas em texto puro. A senha-mestra só existe em memória,
+   nunca é salva.
+--------------------------------------------------------------- */
+const bufToB64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
+const b64ToBuf = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+
+async function deriveKey(passphrase, saltBuf) {
+  const enc = new TextEncoder();
+  const keyMaterial = await crypto.subtle.importKey(
+    "raw", enc.encode(passphrase), { name: "PBKDF2" }, false, ["deriveKey"]
+  );
+  return crypto.subtle.deriveKey(
+    { name: "PBKDF2", salt: saltBuf, iterations: 150000, hash: "SHA-256" },
+    keyMaterial, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]
+  );
+}
+async function encryptText(plain, passphrase) {
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveKey(passphrase, salt);
+  const cipherBuf = await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, new TextEncoder().encode(plain));
+  return JSON.stringify({ s: bufToB64(salt), i: bufToB64(iv), c: bufToB64(cipherBuf) });
+}
+async function decryptText(payloadStr, passphrase) {
+  const { s, i, c } = JSON.parse(payloadStr);
+  const key = await deriveKey(passphrase, b64ToBuf(s));
+  const plainBuf = await crypto.subtle.decrypt({ name: "AES-GCM", iv: b64ToBuf(i) }, key, b64ToBuf(c));
+  return new TextDecoder().decode(plainBuf);
+}
+
+const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+
+function faviconUrl(url) {
+  try {
+    const host = new URL(url).hostname;
+    return `https://www.google.com/s2/favicons?domain=${host}&sz=64`;
+  } catch {
+    return null;
+  }
+}
+function timeAgo(ts) {
+  if (!ts) return "nunca aberto";
+  const days = Math.floor((Date.now() - ts) / 86400000);
+  if (days <= 0) return "aberto hoje";
+  if (days === 1) return "aberto ontem";
+  if (days < 30) return `aberto há ${days}d`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `aberto há ${months}m`;
+  return `aberto há ${Math.floor(months / 12)}a`;
+}
+function hueFor(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  return Math.abs(hash) % 360;
+}
+// Redimensiona e comprime a imagem no navegador antes de guardar, reduzindo
+// qualidade/tamanho até caber no limite de um documento do cofre (256 KiB).
+function compressImage(file, { maxWidth = 900, maxChars = 190000 } = {}) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new window.Image();
+      img.onload = () => {
+        let width = Math.min(maxWidth, img.width);
+        let quality = 0.72;
+        function render() {
+          const scale = width / img.width;
+          const w = Math.max(1, Math.round(img.width * scale));
+          const h = Math.max(1, Math.round(img.height * scale));
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, w, h);
+          return canvas.toDataURL("image/jpeg", quality);
+        }
+        let dataUrl = render();
+        let guard = 0;
+        while (dataUrl.length > maxChars && guard < 10) {
+          if (quality > 0.35) quality -= 0.1;
+          else width = Math.round(width * 0.85);
+          dataUrl = render();
+          guard++;
+        }
+        if (dataUrl.length > maxChars) {
+          reject(new Error("Essa imagem é grande demais mesmo comprimida. Tenta um print menor ou já recortado."));
+          return;
+        }
+        resolve(dataUrl);
+      };
+      img.onerror = () => reject(new Error("Não foi possível ler essa imagem."));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error("Não foi possível ler esse arquivo."));
+    reader.readAsDataURL(file);
+  });
+}
+function LetterAvatar({ label, size = 20 }) {
+  const hue = hueFor(label || "?");
+  return (
+    <span
+      className="rounded flex items-center justify-center font-bold shrink-0"
+      style={{ width: size, height: size, background: `hsl(${hue} 60% 42%)`, color: "#FFFFFF", fontSize: size * 0.52 }}
+    >
+      {(label || "?").trim().charAt(0).toUpperCase()}
+    </span>
+  );
+}
+
+/* ---------------------------------------------------------------
+   Dados
+--------------------------------------------------------------- */
+const DEFAULT_DATA = {
+  categories: [
+    { id: "a-rever", name: "A rever", hasPasswords: false },
+    { id: "quadrinhos", name: "Quadrinhos", hasPasswords: false },
+    { id: "livros", name: "Livros", hasPasswords: false },
+    { id: "fiemg", name: "FIEMG · Trabalho", hasPasswords: true },
+    { id: "design", name: "Recursos de Design", hasPasswords: false },
+    { id: "elevate", name: "Elevate Marketing", hasPasswords: false },
+  ],
+  links: [],
+  prints: [],
+  promptTypes: [
+    { id: "copywriting", name: "Copywriting" },
+    { id: "institucional", name: "Institucional" },
+    { id: "criativo", name: "Estratégia Criativa" },
+    { id: "analise", name: "Análise" },
+  ],
+  prompts: [],
+  commandCategories: [
+    { id: "visuais", name: "Visuais" },
+    { id: "explicacao", name: "Explicação & Estudo" },
+    { id: "analise-negocios", name: "Análise & Negócios" },
+    { id: "pesquisa", name: "Pesquisa & Produtividade" },
+  ],
+  commands: [],
+  settings: { artifactUrl: "" },
+};
+
+// Preenche campos que versões antigas do cofre ainda não tinham.
+function normalizeData(raw) {
+  const hasReview = (raw.categories || []).some((c) => c.id === "a-rever");
+  const categories = hasReview
+    ? raw.categories
+    : [{ id: "a-rever", name: "A rever", hasPasswords: false }, ...(raw.categories || [])];
+  return {
+    categories: categories.map((c) => ({ parentId: null, ...c })),
+    links: (raw.links || []).map((l) => ({ tags: [], lastOpenedAt: null, ...l })),
+    prints: raw.prints || [],
+    promptTypes: raw.promptTypes !== undefined ? raw.promptTypes : DEFAULT_DATA.promptTypes,
+    prompts: raw.prompts || [],
+    commandCategories: raw.commandCategories !== undefined ? raw.commandCategories : DEFAULT_DATA.commandCategories,
+    commands: raw.commands || [],
+    settings: { artifactUrl: "", ...(raw.settings || {}) },
+  };
+}
+
+// Troca a posição de um item de array com o vizinho (na mesma lista de "irmãos", se fornecida).
+function moveItem(list, id, direction, siblingFilter) {
+  const siblings = siblingFilter ? list.filter(siblingFilter) : list;
+  const idx = siblings.findIndex((x) => x.id === id);
+  const swapIdx = idx + direction;
+  if (idx === -1 || swapIdx < 0 || swapIdx >= siblings.length) return list;
+  const a = siblings[idx], b = siblings[swapIdx];
+  const posA = list.indexOf(a), posB = list.indexOf(b);
+  const next = [...list];
+  next[posA] = b;
+  next[posB] = a;
+  return next;
+}
+
+/* ---------------------------------------------------------------
+   Camada de armazenamento (capacidade "db" do artifact) — cada
+   lista vira uma coleção própria, e o estado em memória continua
+   sendo o mesmo objeto `data` de sempre; só a persistência mudou.
+--------------------------------------------------------------- */
+const ORDERED_COLLECTIONS = ["categories", "promptTypes", "commandCategories"];
+const PLAIN_COLLECTIONS = ["links", "prints", "prompts", "commands"];
+
+function stripId(obj) {
+  const { id, ...rest } = obj;
+  return rest;
+}
+
+async function loadAllFromDb(db) {
+  const [catSnap, linkSnap, printSnap, ptypeSnap, promptSnap, ccatSnap, cmdSnap, settingsSnap, initSnap] = await Promise.all([
+    db.collection("categories").get(),
+    db.collection("links").get(),
+    db.collection("prints").get(),
+    db.collection("promptTypes").get(),
+    db.collection("prompts").get(),
+    db.collection("commandCategories").get(),
+    db.collection("commands").get(),
+    db.doc("settings/main").get(),
+    db.doc("meta/init").get(),
+  ]);
+
+  const toArr = (snap) => snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const byOrder = (arr) => [...arr].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  const byCreated = (arr) => [...arr].sort((a, b) => (a.createdAt ?? 0) - (b.createdAt ?? 0));
+
+  let categories = byOrder(toArr(catSnap));
+  let promptTypes = byOrder(toArr(ptypeSnap));
+  let commandCategories = byOrder(toArr(ccatSnap));
+
+  if (!initSnap.exists) {
+    // Primeira vez que este cofre abre: semeia as listas padrão de uma vez,
+    // pra não depender de um fallback silencioso toda vez que o cofre carrega.
+    categories = DEFAULT_DATA.categories;
+    promptTypes = DEFAULT_DATA.promptTypes;
+    commandCategories = DEFAULT_DATA.commandCategories;
+    const seedWrites = [
+      ...categories.map((c, i) => db.collection("categories").doc(c.id).set({ ...stripId(c), order: i })),
+      ...promptTypes.map((t, i) => db.collection("promptTypes").doc(t.id).set({ ...stripId(t), order: i })),
+      ...commandCategories.map((c, i) => db.collection("commandCategories").doc(c.id).set({ ...stripId(c), order: i })),
+      db.doc("meta/init").set({ seeded: true, seededAt: Date.now() }),
+    ];
+    Promise.all(seedWrites).catch(() => {});
+  }
+
+  return normalizeData({
+    categories,
+    links: byCreated(toArr(linkSnap)),
+    prints: byCreated(toArr(printSnap)),
+    promptTypes,
+    prompts: byCreated(toArr(promptSnap)),
+    commandCategories,
+    commands: byCreated(toArr(cmdSnap)),
+    settings: settingsSnap.exists ? settingsSnap.data() : {},
+  });
+}
+
+// Compara duas listas (antes/depois) e devolve as promises de escrita
+// necessárias: só grava o que realmente mudou, apaga o que sumiu.
+function diffArrayWrites(db, collectionName, beforeArr, afterArr, ordered) {
+  const beforeById = new Map(beforeArr.map((x) => [x.id, x]));
+  const afterById = new Map(afterArr.map((x) => [x.id, x]));
+  const writes = [];
+  for (const id of beforeById.keys()) {
+    if (!afterById.has(id)) writes.push(db.collection(collectionName).doc(id).delete());
+  }
+  afterArr.forEach((item, i) => {
+    const body = ordered ? { ...stripId(item), order: i } : stripId(item);
+    const prev = beforeById.get(item.id);
+    const prevBody = prev
+      ? (ordered ? { ...stripId(prev), order: beforeArr.indexOf(prev) } : stripId(prev))
+      : null;
+    if (!prevBody || JSON.stringify(prevBody) !== JSON.stringify(body)) {
+      writes.push(db.collection(collectionName).doc(item.id).set(body));
+    }
+  });
+  return writes;
+}
+
+async function syncToDb(db, before, after) {
+  const writes = [];
+  for (const name of ORDERED_COLLECTIONS) {
+    writes.push(...diffArrayWrites(db, name, before[name] || [], after[name] || [], true));
+  }
+  for (const name of PLAIN_COLLECTIONS) {
+    writes.push(...diffArrayWrites(db, name, before[name] || [], after[name] || [], false));
+  }
+  if (JSON.stringify(before.settings) !== JSON.stringify(after.settings)) {
+    writes.push(db.doc("settings/main").set(after.settings || {}));
+  }
+  await Promise.all(writes);
+}
+
+/* ---------------------------------------------------------------
+   Componente principal
+--------------------------------------------------------------- */
+function Vault({ onSignOut }) {
+  const [data, setData] = useState(null);
+  const [loaded, setLoaded] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [dbUnavailable, setDbUnavailable] = useState(false);
+  const [section, setSection] = useState("links");
+
+  const dbRef = useRef(null);
+  const downloadsRef = useRef(null);
+  const dataRef = useRef(null);
+  dataRef.current = data;
+
+  // links
+  const [query, setQuery] = useState("");
+  const [activeTags, setActiveTags] = useState(new Set());
+  const [sortBy, setSortBy] = useState("recent");
+  const [showLinkForm, setShowLinkForm] = useState(false);
+  const [editingLink, setEditingLink] = useState(null);
+  const [linkFormCategoryId, setLinkFormCategoryId] = useState(null);
+  const [showCatForm, setShowCatForm] = useState(false);
+  const [catFormParentId, setCatFormParentId] = useState(null);
+  const [renamingCategory, setRenamingCategory] = useState(null);
+  const [masterPass, setMasterPass] = useState("");
+  const [passModal, setPassModal] = useState(null);
+  const [revealed, setRevealed] = useState({});
+  const [revealError, setRevealError] = useState({});
+  const [copiedId, setCopiedId] = useState(null);
+  const [showBookmarklet, setShowBookmarklet] = useState(false);
+  const [quickCapture, setQuickCapture] = useState(null);
+  const [showPrintForm, setShowPrintForm] = useState(false);
+  const [editingPrint, setEditingPrint] = useState(null);
+  const [printFormCategoryId, setPrintFormCategoryId] = useState(null);
+  const [viewingPrint, setViewingPrint] = useState(null);
+
+  // prompts
+  const [promptQuery, setPromptQuery] = useState("");
+  const [activePromptType, setActivePromptType] = useState("all");
+  const [expandedPromptId, setExpandedPromptId] = useState(null);
+  const [showPromptForm, setShowPromptForm] = useState(false);
+  const [editingPrompt, setEditingPrompt] = useState(null);
+  const [showPromptTypeForm, setShowPromptTypeForm] = useState(false);
+  const [renamingPromptType, setRenamingPromptType] = useState(null);
+  const [copiedPromptId, setCopiedPromptId] = useState(null);
+
+  // comandos
+  const [commandQuery, setCommandQuery] = useState("");
+  const [activeCommandCat, setActiveCommandCat] = useState("all");
+  const [showCommandForm, setShowCommandForm] = useState(false);
+  const [editingCommand, setEditingCommand] = useState(null);
+  const [showCommandCatForm, setShowCommandCatForm] = useState(false);
+  const [renamingCommandCategory, setRenamingCommandCategory] = useState(null);
+  const [copiedCommandId, setCopiedCommandId] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const db = fbDb;
+        dbRef.current = db;
+        downloadsRef.current = null;
+        if (!db) {
+          setDbUnavailable(true);
+          setData(DEFAULT_DATA);
+          setLoaded(true);
+          return;
+        }
+        const initial = await loadAllFromDb(db);
+        setData(initial);
+        setLoaded(true);
+      } catch {
+        setDbUnavailable(true);
+        setData(DEFAULT_DATA);
+        setLoaded(true);
+      }
+
+      try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get("add") === "1") {
+          setQuickCapture({ url: params.get("url") || "", title: params.get("title") || "" });
+          window.history.replaceState({}, "", window.location.pathname);
+        }
+      } catch {
+        /* sem acesso à URL neste contexto — ignora */
+      }
+    })();
+  }, []);
+
+  useEffect(() => {
+    if (quickCapture) {
+      setEditingLink(null);
+      setLinkFormCategoryId("a-rever");
+      setShowLinkForm(true);
+    }
+  }, [quickCapture]);
+
+  const persist = useCallback(async (next) => {
+    const before = dataRef.current;
+    setData(next);
+    dataRef.current = next;
+    if (!dbRef.current) {
+      setSaveError(true);
+      return;
+    }
+    try {
+      await syncToDb(dbRef.current, before, next);
+      setSaveError(false);
+    } catch {
+      setSaveError(true);
+    }
+  }, []);
+
+  // Hooks acabam aqui. Nada de useMemo/useState/useEffect abaixo deste ponto —
+  // o resto é cálculo simples, seguro para ficar depois do retorno condicional.
+  if (!loaded || !data) {
+    return (
+      <div style={{ background: INK }} className="w-full h-full min-h-[560px] flex items-center justify-center">
+        <p className="font-mono text-sm tracking-widest" style={{ color: BRASS }}>CARREGANDO O ARQUIVO…</p>
+      </div>
+    );
+  }
+
+  /* ---------------- derivados: links ---------------- */
+  const allTags = [...new Set(data.links.flatMap((l) => l.tags || []))].sort();
+
+  function matchesLinkFilter(l) {
+    if (activeTags.size > 0 && !(l.tags || []).some((t) => activeTags.has(t))) return false;
+    if (!query.trim()) return true;
+    const q = query.trim().toLowerCase();
+    return (
+      l.title.toLowerCase().includes(q) ||
+      l.url.toLowerCase().includes(q) ||
+      (l.notes || "").toLowerCase().includes(q) ||
+      (l.tags || []).some((t) => t.toLowerCase().includes(q))
+    );
+  }
+  const sortedLinks = data.links.filter(matchesLinkFilter).sort((a, b) => {
+    if (sortBy === "recent") return b.createdAt - a.createdAt;
+    if (sortBy === "clicks") return (b.clicks || 0) - (a.clicks || 0);
+    if (sortBy === "az") return a.title.localeCompare(b.title);
+    if (sortBy === "stale") return (a.lastOpenedAt || 0) - (b.lastOpenedAt || 0);
+    return 0;
+  });
+  const linksByCategory = {};
+  data.categories.forEach((c) => (linksByCategory[c.id] = []));
+  sortedLinks.forEach((l) => { if (linksByCategory[l.categoryId]) linksByCategory[l.categoryId].push(l); });
+
+  const sortedPrints = [...data.prints]
+    .filter((p) => !query.trim() || (p.caption || "").toLowerCase().includes(query.trim().toLowerCase()))
+    .sort((a, b) => b.createdAt - a.createdAt);
+  const printsByCategory = {};
+  data.categories.forEach((c) => (printsByCategory[c.id] = []));
+  sortedPrints.forEach((p) => { if (printsByCategory[p.categoryId]) printsByCategory[p.categoryId].push(p); });
+
+  /* ---------------- derivados: prompts ---------------- */
+  const visiblePrompts = data.prompts.filter((p) => {
+    if (activePromptType !== "all" && p.typeId !== activePromptType) return false;
+    if (!promptQuery.trim()) return true;
+    const q = promptQuery.trim().toLowerCase();
+    return (
+      p.title.toLowerCase().includes(q) ||
+      (p.description || "").toLowerCase().includes(q) ||
+      (p.content || "").toLowerCase().includes(q)
+    );
+  });
+
+  /* ---------------- derivados: comandos ---------------- */
+  const visibleCommands = data.commands.filter((c) => {
+    if (activeCommandCat !== "all" && c.categoryId !== activeCommandCat) return false;
+    if (!commandQuery.trim()) return true;
+    const q = commandQuery.trim().toLowerCase();
+    return (
+      c.command.toLowerCase().includes(q) ||
+      (c.description || "").toLowerCase().includes(q) ||
+      (c.subdescription || "").toLowerCase().includes(q)
+    );
+  });
+
+  /* ---------------- handlers: links ---------------- */
+  function requestPassphrase(onSubmit) {
+    if (masterPass) return onSubmit(masterPass);
+    setPassModal({ onSubmit });
+  }
+
+  async function saveLink(form) {
+    let passwordPayload = null;
+    if (form.categoryHasPasswords && form.password) {
+      passwordPayload = await encryptText(form.password, masterPass);
+    }
+    let next;
+    if (editingLink) {
+      next = {
+        ...data,
+        links: data.links.map((l) =>
+          l.id === editingLink.id
+            ? {
+                ...l,
+                title: form.title,
+                url: form.url,
+                notes: form.notes,
+                categoryId: form.categoryId,
+                tags: form.tags,
+                ...(form.categoryHasPasswords
+                  ? form.passwordTouched ? { password: passwordPayload } : {}
+                  : { password: null }),
+              }
+            : l
+        ),
+      };
+    } else {
+      next = {
+        ...data,
+        links: [
+          ...data.links,
+          {
+            id: uid(), categoryId: form.categoryId, title: form.title, url: form.url,
+            notes: form.notes, tags: form.tags, password: passwordPayload,
+            clicks: 0, lastOpenedAt: null, createdAt: Date.now(),
+          },
+        ],
+      };
+    }
+    persist(next);
+    setShowLinkForm(false);
+    setEditingLink(null);
+    setQuickCapture(null);
+  }
+  function deleteLink(id) { persist({ ...data, links: data.links.filter((l) => l.id !== id) }); }
+  function registerClick(link) {
+    persist({ ...data, links: data.links.map((l) => l.id === link.id ? { ...l, clicks: (l.clicks || 0) + 1, lastOpenedAt: Date.now() } : l) });
+  }
+  function addCategory(name, hasPasswords, parentId = null) {
+    const id = uid();
+    persist({ ...data, categories: [...data.categories, { id, name, hasPasswords, parentId }] });
+    setShowCatForm(false);
+    setCatFormParentId(null);
+  }
+  function renameCategory(id, name) {
+    persist({ ...data, categories: data.categories.map((c) => c.id === id ? { ...c, name } : c) });
+    setRenamingCategory(null);
+  }
+  function moveCategory(id, direction) {
+    const cat = data.categories.find((c) => c.id === id);
+    if (!cat) return;
+    persist({ ...data, categories: moveItem(data.categories, id, direction, (c) => c.parentId === cat.parentId) });
+  }
+  function deleteCategory(id) {
+    if (data.links.some((l) => l.categoryId === id)) {
+      alert("Essa categoria tem links dentro. Mova ou apague os links antes de remover a categoria.");
+      return;
+    }
+    if (data.categories.some((c) => c.parentId === id)) {
+      alert("Essa categoria tem subcategorias dentro. Apague as subcategorias antes de remover a categoria.");
+      return;
+    }
+    persist({ ...data, categories: data.categories.filter((c) => c.id !== id) });
+  }
+  async function revealPassword(link) {
+    requestPassphrase(async (pass) => {
+      try {
+        const plain = await decryptText(link.password, pass);
+        setRevealed((r) => ({ ...r, [link.id]: plain }));
+        setRevealError((r) => ({ ...r, [link.id]: null }));
+      } catch {
+        setRevealError((r) => ({ ...r, [link.id]: true }));
+        setMasterPass("");
+      }
+    });
+  }
+  function copyPassword(link) {
+    const plain = revealed[link.id];
+    if (!plain) return;
+    navigator.clipboard.writeText(plain);
+    setCopiedId(link.id);
+    setTimeout(() => setCopiedId(null), 1400);
+  }
+  function saveArtifactUrl(url) { persist({ ...data, settings: { ...data.settings, artifactUrl: url } }); }
+
+  function savePrint(form) {
+    let next;
+    if (editingPrint) {
+      next = {
+        ...data,
+        prints: data.prints.map((p) =>
+          p.id === editingPrint.id
+            ? { ...p, categoryId: form.categoryId, caption: form.caption, ...(form.image ? { image: form.image } : {}) }
+            : p
+        ),
+      };
+    } else {
+      next = {
+        ...data,
+        prints: [...data.prints, { id: uid(), categoryId: form.categoryId, caption: form.caption, image: form.image, createdAt: Date.now() }],
+      };
+    }
+    persist(next);
+    setShowPrintForm(false);
+    setEditingPrint(null);
+  }
+  function deletePrint(id) {
+    persist({ ...data, prints: data.prints.filter((p) => p.id !== id) });
+    setViewingPrint(null);
+  }
+  function openPrintFormFor(categoryId) {
+    setEditingPrint(null);
+    setPrintFormCategoryId(categoryId);
+    setShowPrintForm(true);
+  }
+
+  /* ---------------- handlers: prompts ---------------- */
+  function addPromptType(name) {
+    const id = uid();
+    persist({ ...data, promptTypes: [...data.promptTypes, { id, name }] });
+    setShowPromptTypeForm(false);
+  }
+  function renamePromptType(id, name) {
+    persist({ ...data, promptTypes: data.promptTypes.map((t) => t.id === id ? { ...t, name } : t) });
+    setRenamingPromptType(null);
+  }
+  function movePromptType(id, direction) {
+    persist({ ...data, promptTypes: moveItem(data.promptTypes, id, direction) });
+  }
+  function deletePromptType(id) {
+    if (data.prompts.some((p) => p.typeId === id)) {
+      alert("Esse tipo tem prompts vinculados. Mova ou apague os prompts antes de remover o tipo.");
+      return;
+    }
+    persist({ ...data, promptTypes: data.promptTypes.filter((t) => t.id !== id) });
+    if (activePromptType === id) setActivePromptType("all");
+  }
+  function savePrompt(form) {
+    let next;
+    if (editingPrompt) {
+      next = { ...data, prompts: data.prompts.map((p) => p.id === editingPrompt.id ? { ...p, ...form } : p) };
+    } else {
+      next = { ...data, prompts: [...data.prompts, { id: uid(), ...form, createdAt: Date.now() }] };
+    }
+    persist(next);
+    setShowPromptForm(false);
+    setEditingPrompt(null);
+  }
+  function deletePrompt(id) {
+    persist({ ...data, prompts: data.prompts.filter((p) => p.id !== id) });
+  }
+  function copyPromptContent(prompt) {
+    navigator.clipboard.writeText(prompt.content);
+    setCopiedPromptId(prompt.id);
+    setTimeout(() => setCopiedPromptId(null), 1400);
+  }
+
+  /* ---------------- handlers: comandos ---------------- */
+  function addCommandCategory(name) {
+    const id = uid();
+    persist({ ...data, commandCategories: [...data.commandCategories, { id, name }] });
+    setShowCommandCatForm(false);
+  }
+  function renameCommandCategory(id, name) {
+    persist({ ...data, commandCategories: data.commandCategories.map((c) => c.id === id ? { ...c, name } : c) });
+    setRenamingCommandCategory(null);
+  }
+  function moveCommandCategory(id, direction) {
+    persist({ ...data, commandCategories: moveItem(data.commandCategories, id, direction) });
+  }
+  function deleteCommandCategory(id) {
+    if (data.commands.some((c) => c.categoryId === id)) {
+      alert("Essa categoria tem comandos vinculados. Mova ou apague os comandos antes de remover a categoria.");
+      return;
+    }
+    persist({ ...data, commandCategories: data.commandCategories.filter((c) => c.id !== id) });
+    if (activeCommandCat === id) setActiveCommandCat("all");
+  }
+  function saveCommand(form) {
+    let next;
+    if (editingCommand) {
+      next = { ...data, commands: data.commands.map((c) => c.id === editingCommand.id ? { ...c, ...form } : c) };
+    } else {
+      next = { ...data, commands: [...data.commands, { id: uid(), ...form, createdAt: Date.now() }] };
+    }
+    persist(next);
+    setShowCommandForm(false);
+    setEditingCommand(null);
+  }
+  function deleteCommand(id) { persist({ ...data, commands: data.commands.filter((c) => c.id !== id) }); }
+  function copyCommand(cmd) {
+    navigator.clipboard.writeText(cmd.command);
+    setCopiedCommandId(cmd.id);
+    setTimeout(() => setCopiedCommandId(null), 1400);
+  }
+
+  /* ---------------- import / export (tudo junto) ---------------- */
+  async function exportJSON() {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const filename = `cofre-${new Date().toISOString().slice(0, 10)}.json`;
+    if (downloadsRef.current) {
+      try {
+        await downloadsRef.current.save({ filename, data: blob });
+        return;
+      } catch (e) {
+        if (e && e.code === "declined") return;
+        // cai pro método direto abaixo
+      }
+    }
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  }
+
+  async function downloadPrint(print) {
+    const filename = `print-${print.id}.jpg`;
+    if (downloadsRef.current) {
+      try {
+        const res = await fetch(print.image);
+        const blob = await res.blob();
+        await downloadsRef.current.save({ filename, data: blob });
+        return;
+      } catch (e) {
+        if (e && e.code === "declined") return;
+        // cai pro método direto abaixo
+      }
+    }
+    const a = document.createElement("a");
+    a.href = print.image;
+    a.download = filename;
+    a.click();
+  }
+  function importJSON(file) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!parsed.categories || !parsed.links) throw new Error("formato inválido");
+        const dedupe = (base, extra) => [...base, ...extra.filter((e) => !base.some((b) => b.id === e.id))];
+        persist({
+          categories: dedupe(data.categories, parsed.categories || []),
+          links: dedupe(data.links, parsed.links || []),
+          prints: dedupe(data.prints, parsed.prints || []),
+          promptTypes: dedupe(data.promptTypes, parsed.promptTypes || []),
+          prompts: dedupe(data.prompts, parsed.prompts || []),
+          commandCategories: dedupe(data.commandCategories, parsed.commandCategories || []),
+          commands: dedupe(data.commands, parsed.commands || []),
+          settings: data.settings,
+        });
+      } catch {
+        alert("Não foi possível importar esse arquivo. Verifique se é um export deste mesmo cofre.");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function toggleTag(tag) {
+    setActiveTags((prev) => {
+      const next = new Set(prev);
+      next.has(tag) ? next.delete(tag) : next.add(tag);
+      return next;
+    });
+  }
+  function openLinkFormFor(categoryId) {
+    setEditingLink(null);
+    setLinkFormCategoryId(categoryId);
+    setShowLinkForm(true);
+  }
+
+  const promptTypesById = Object.fromEntries(data.promptTypes.map((t, i) => [t.id, { ...t, color: colorFor(i) }]));
+  const commandCatsById = Object.fromEntries(data.commandCategories.map((c) => [c.id, c]));
+
+  return (
+    <div style={{ fontFamily: "'Inter', system-ui, sans-serif" }} className="w-full min-h-screen flex flex-col text-[#FFFFFF]">
+      <FontImport />
+
+      {/* Header + abas */}
+      <div className="glass flex items-center gap-1 px-4 sm:px-6 pt-4 sm:pt-5 sticky top-0 z-20 overflow-x-auto rounded-none border-x-0 border-t-0">
+        <p style={{ fontFamily: "'Space Grotesk', sans-serif", color: PAPER }} className="text-base sm:text-lg font-bold tracking-tight mr-2 sm:mr-4 shrink-0">
+          Cofre
+        </p>
+        {[
+          { id: "links", label: "Links", icon: Link2 },
+          { id: "prompts", label: "Prompts", icon: Sparkles },
+          { id: "comandos", label: "Comandos", icon: Terminal },
+        ].map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setSection(t.id)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-2.5 text-sm font-medium shrink-0 whitespace-nowrap"
+            style={{ color: section === t.id ? PAPER : "#CFE0FB", borderBottom: section === t.id ? `2px solid ${PAPER}` : "2px solid transparent" }}
+          >
+            <t.icon size={14} /> {t.label}
+          </button>
+        ))}
+        {onSignOut && (
+          <button onClick={() => { if (confirm("Sair do cofre neste aparelho?")) onSignOut(); }} className="ml-auto text-[11px] font-mono shrink-0 px-2 pb-2" style={{ color: "#CFE0FB" }} title="Sair">sair</button>
+        )}
+        {dbUnavailable && (
+          <span className="ml-auto flex items-center gap-1.5 text-[10px] font-mono shrink-0 pb-2" style={{ color: RUST }} title="Esta página precisa ser aberta como artifact publicado no claude.ai para salvar de verdade.">
+            <CloudOff size={12} /> <span className="hidden sm:inline">sem armazenamento</span>
+          </span>
+        )}
+      </div>
+
+      {/* -------------------- LINKS -------------------- */}
+      {section === "links" && (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="px-4 sm:px-6 pt-4 pb-3 flex items-center gap-2 flex-wrap" style={{ borderBottom: `1px solid ${PAGE_LINE}` }}>
+            <div className="relative flex-1 min-w-[140px] sm:min-w-[180px] max-w-sm">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: PAGE_MUTED }} />
+              <input
+                value={query} onChange={(e) => setQuery(e.target.value)}
+                placeholder="Buscar…"
+                className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: "rgba(0,0,0,0.35)", border: `1px solid ${LINE}`, color: PAPER }}
+              />
+            </div>
+            <button
+              onClick={() => setSortBy((s) => (s === "recent" ? "clicks" : s === "clicks" ? "az" : s === "az" ? "stale" : "recent"))}
+              className="glass-soft flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-[11px] font-mono shrink-0"
+              style={{ color: PAGE_MUTED }} title="Alternar ordenação"
+            >
+              <ArrowUpDown size={12} />
+              <span className="hidden sm:inline">
+                {sortBy === "recent" ? "RECENTES" : sortBy === "clicks" ? "MAIS USADOS" : sortBy === "az" ? "A–Z" : "ESQUECIDOS"}
+              </span>
+            </button>
+            <button onClick={() => setShowBookmarklet(true)} className="glass-soft p-2 rounded-lg shrink-0" style={{}} title="Captura rápida">
+              <BookmarkPlus size={14} style={{ color: TEAL }} />
+            </button>
+            <button onClick={exportJSON} className="glass-soft p-2 rounded-lg shrink-0" style={{}} title="Exportar tudo">
+              <Download size={14} style={{ color: PAGE_MUTED }} />
+            </button>
+            <label className="glass-soft p-2 rounded-lg shrink-0 cursor-pointer" style={{}} title="Importar">
+              <Upload size={14} style={{ color: PAGE_MUTED }} />
+              <input type="file" accept=".json" className="hidden" onChange={(e) => e.target.files[0] && importJSON(e.target.files[0])} />
+            </label>
+            <button
+              onClick={() => { setCatFormParentId(null); setShowCatForm(true); }}
+              className="glass-soft flex items-center gap-1.5 px-2.5 sm:px-3 py-2 rounded-lg text-sm font-medium shrink-0"
+              style={{ borderStyle: "dashed", color: BRASS }}
+              title="Nova categoria"
+            >
+              <FolderPlus size={14} /> <span className="hidden sm:inline">Categoria</span>
+            </button>
+            <button
+              onClick={() => openLinkFormFor(data.categories[0]?.id)}
+              className="flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded text-sm font-medium ml-auto shrink-0"
+              style={{ background: PAPER, color: BRASS, border: `1px solid ${PAGE_LINE}` }}
+            >
+              <Plus size={14} /> <span className="hidden xs:inline sm:inline">Novo link</span>
+            </button>
+          </div>
+
+          {allTags.length > 0 && (
+            <div className="px-4 sm:px-6 py-2.5 flex items-center gap-1.5 flex-wrap" style={{ borderBottom: `1px solid ${PAGE_LINE}` }}>
+              <Tag size={12} style={{ color: PAGE_MUTED }} className="shrink-0" />
+              {allTags.map((t) => (
+                <Pill key={t} label={t} active={activeTags.has(t)} onClick={() => toggleTag(t)} />
+              ))}
+              {activeTags.size > 0 && (
+                <button onClick={() => setActiveTags(new Set())} className="text-[11px] font-mono underline ml-1" style={{ color: PAGE_MUTED }}>limpar</button>
+              )}
+            </div>
+          )}
+
+          {saveError && (
+            <p className="px-4 sm:px-6 py-1.5 text-[10px] font-mono flex items-center gap-1.5" style={{ color: RUST }}>
+              <RefreshCw size={10} /> Falha ao salvar no cofre. Verifique a conexão e tente de novo.
+            </p>
+          )}
+
+          <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 sm:px-6 py-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 items-start">
+              {data.categories.filter((cat) => !cat.parentId).map((cat, i, topCats) => (
+                <BoardColumn
+                  key={cat.id} category={cat} items={linksByCategory[cat.id] || []}
+                  prints={printsByCategory[cat.id] || []}
+                  subcategories={data.categories.filter((c) => c.parentId === cat.id)}
+                  linksByCategory={linksByCategory}
+                  onAddLink={(targetId) => openLinkFormFor(targetId)}
+                  onAddPrint={(targetId) => openPrintFormFor(targetId)}
+                  onViewPrint={(p) => setViewingPrint(p)}
+                  onAddSubcategory={() => { setCatFormParentId(cat.id); setShowCatForm(true); }}
+                  onDeleteCategory={(id, name) => { if (confirm(`Excluir a categoria "${name}"?`)) deleteCategory(id); }}
+                  onRenameCategory={(c) => setRenamingCategory(c)}
+                  onMoveCategory={i > 0 || i < topCats.length - 1 ? moveCategory : undefined}
+                  isFirst={i === 0} isLast={i === topCats.length - 1}
+                  onOpen={registerClick}
+                  onEdit={(l) => { setEditingLink(l); setLinkFormCategoryId(l.categoryId); setShowLinkForm(true); }}
+                  onDelete={deleteLink}
+                  revealed={revealed} revealError={revealError} copiedId={copiedId}
+                  onReveal={revealPassword} onHide={(id) => setRevealed((r) => ({ ...r, [id]: undefined }))} onCopy={copyPassword}
+                />
+              ))}
+              <button
+                onClick={() => { setCatFormParentId(null); setShowCatForm(true); }}
+                className="glass-soft rounded-2xl flex items-center justify-center gap-2 text-sm font-mono"
+                style={{ borderStyle: "dashed", color: BRASS, minHeight: 140 }}
+              >
+                <FolderPlus size={14} /> nova categoria
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------- PROMPTS -------------------- */}
+      {section === "prompts" && (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="px-4 sm:px-6 pt-4 pb-3 flex items-center gap-2" style={{ borderBottom: `1px solid ${PAGE_LINE}` }}>
+            <div className="relative flex-1 max-w-sm">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: PAGE_MUTED }} />
+              <input
+                value={promptQuery} onChange={(e) => setPromptQuery(e.target.value)}
+                placeholder="Buscar prompt…"
+                className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: "rgba(0,0,0,0.35)", border: `1px solid ${LINE}`, color: PAPER }}
+              />
+            </div>
+            <button
+              onClick={() => { setEditingPrompt(null); setShowPromptForm(true); }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded text-sm font-medium ml-auto"
+              style={{ background: PAPER, color: BRASS, border: `1px solid ${PAGE_LINE}` }}
+            >
+              <Plus size={14} /> Novo prompt
+            </button>
+          </div>
+
+          <div className="px-4 sm:px-6 py-2.5 flex items-center gap-1.5 flex-wrap" style={{ borderBottom: `1px solid ${PAGE_LINE}` }}>
+            <Pill label="Todos" active={activePromptType === "all"} onClick={() => setActivePromptType("all")} />
+            {data.promptTypes.map((t, i) => (
+              <Pill
+                key={t.id} label={t.name} color={promptTypesById[t.id].color}
+                active={activePromptType === t.id} onClick={() => setActivePromptType(t.id)}
+                onRemove={() => deletePromptType(t.id)}
+                onEdit={() => setRenamingPromptType(t)}
+                onMoveLeft={i > 0 ? () => movePromptType(t.id, -1) : undefined}
+                onMoveRight={i < data.promptTypes.length - 1 ? () => movePromptType(t.id, 1) : undefined}
+              />
+            ))}
+            <button
+              onClick={() => setShowPromptTypeForm(true)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono"
+              style={{ border: `1px dashed ${PAGE_LINE}`, color: BRASS }}
+            >
+              <Plus size={11} /> tipo
+            </button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+            {visiblePrompts.length === 0 ? (
+              <EmptyState label={data.prompts.length === 0 ? "Nenhum prompt guardado ainda." : "Nada encontrado."} />
+            ) : (
+              visiblePrompts.map((p) => {
+                const type = promptTypesById[p.typeId];
+                return (
+                  <PromptCard
+                    key={p.id} prompt={p} typeName={type?.name || "—"} typeColor={type?.color || BRASS}
+                    expanded={expandedPromptId === p.id}
+                    onToggle={() => setExpandedPromptId((cur) => (cur === p.id ? null : p.id))}
+                    onEdit={() => { setEditingPrompt(p); setShowPromptForm(true); }}
+                    onDelete={() => deletePrompt(p.id)}
+                    onCopy={() => copyPromptContent(p)}
+                    copied={copiedPromptId === p.id}
+                  />
+                );
+              })
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* -------------------- COMANDOS -------------------- */}
+      {section === "comandos" && (
+        <div className="flex-1 min-h-0 flex flex-col">
+          <div className="px-4 sm:px-6 pt-4 pb-3 flex items-center gap-2" style={{ borderBottom: `1px solid ${PAGE_LINE}` }}>
+            <div className="relative flex-1 max-w-md">
+              <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: PAGE_MUTED }} />
+              <input
+                value={commandQuery} onChange={(e) => setCommandQuery(e.target.value)}
+                placeholder="Buscar comando…"
+                className="w-full pl-9 pr-3 py-2 rounded-lg text-sm outline-none"
+                style={{ background: "rgba(0,0,0,0.35)", border: `1px solid ${LINE}`, color: PAPER }}
+              />
+            </div>
+            <button
+              onClick={() => { setEditingCommand(null); setShowCommandForm(true); }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded text-sm font-medium ml-auto"
+              style={{ background: PAPER, color: BRASS, border: `1px solid ${PAGE_LINE}` }}
+            >
+              <Plus size={14} /> Novo comando
+            </button>
+          </div>
+
+          <div className="px-4 sm:px-6 py-2.5 flex items-center gap-1.5 flex-wrap" style={{ borderBottom: `1px solid ${PAGE_LINE}` }}>
+            <Pill label="Todos" active={activeCommandCat === "all"} onClick={() => setActiveCommandCat("all")} />
+            {data.commandCategories.map((c, i) => (
+              <Pill
+                key={c.id} label={c.name} active={activeCommandCat === c.id}
+                onClick={() => setActiveCommandCat(c.id)} onRemove={() => deleteCommandCategory(c.id)}
+                onEdit={() => setRenamingCommandCategory(c)}
+                onMoveLeft={i > 0 ? () => moveCommandCategory(c.id, -1) : undefined}
+                onMoveRight={i < data.commandCategories.length - 1 ? () => moveCommandCategory(c.id, 1) : undefined}
+              />
+            ))}
+            <button
+              onClick={() => setShowCommandCatForm(true)}
+              className="flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-mono"
+              style={{ border: `1px dashed ${PAGE_LINE}`, color: BRASS }}
+            >
+              <Plus size={11} /> categoria
+            </button>
+          </div>
+
+          <p className="px-4 sm:px-6 pt-3 text-[11px] font-mono" style={{ color: PAGE_MUTED }}>
+            {visibleCommands.length} comando{visibleCommands.length === 1 ? "" : "s"} · clique numa linha pra copiar
+          </p>
+
+          <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-2">
+            <div className="glass rounded-2xl overflow-hidden px-1">
+            {visibleCommands.length === 0 ? (
+              <EmptyState label={data.commands.length === 0 ? "Nenhum comando guardado ainda." : "Nada encontrado."} />
+            ) : (
+              visibleCommands.map((c, i) => (
+                <CommandRow
+                  key={c.id} index={i + 1} command={c}
+                  onCopy={() => copyCommand(c)} copied={copiedCommandId === c.id}
+                  onEdit={() => { setEditingCommand(c); setShowCommandForm(true); }}
+                  onDelete={() => deleteCommand(c.id)}
+                />
+              ))
+            )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* -------------------- Modais -------------------- */}
+      {showLinkForm && (
+        <LinkFormModal
+          categories={data.categories} initial={editingLink}
+          prefill={quickCapture}
+          defaultCategoryId={quickCapture ? "a-rever" : linkFormCategoryId || data.categories[0]?.id}
+          onClose={() => { setShowLinkForm(false); setEditingLink(null); setQuickCapture(null); }}
+          onSubmit={saveLink} requestPassphrase={requestPassphrase}
+        />
+      )}
+      {showCatForm && (
+        <CategoryFormModal
+          topCategories={data.categories.filter((c) => !c.parentId)}
+          defaultParentId={catFormParentId}
+          onClose={() => { setShowCatForm(false); setCatFormParentId(null); }}
+          onSubmit={addCategory}
+        />
+      )}
+      {renamingCategory && (
+        <SimpleNameModal
+          title="Renomear categoria" label="Nome" initial={renamingCategory.name} submitLabel="Salvar"
+          onClose={() => setRenamingCategory(null)}
+          onSubmit={(name) => renameCategory(renamingCategory.id, name)}
+        />
+      )}
+      {showPrintForm && (
+        <PrintFormModal
+          categories={data.categories} initial={editingPrint}
+          defaultCategoryId={printFormCategoryId}
+          onClose={() => { setShowPrintForm(false); setEditingPrint(null); }}
+          onSubmit={savePrint}
+        />
+      )}
+      {viewingPrint && (
+        <PrintViewerModal
+          print={viewingPrint}
+          categoryName={data.categories.find((c) => c.id === viewingPrint.categoryId)?.name}
+          onClose={() => setViewingPrint(null)}
+          onEdit={() => { setEditingPrint(viewingPrint); setPrintFormCategoryId(viewingPrint.categoryId); setShowPrintForm(true); setViewingPrint(null); }}
+          onDelete={() => deletePrint(viewingPrint.id)}
+          onDownload={() => downloadPrint(viewingPrint)}
+        />
+      )}
+      {showBookmarklet && (
+        <BookmarkletModal artifactUrl={data.settings?.artifactUrl || ""} onSaveUrl={saveArtifactUrl} onClose={() => setShowBookmarklet(false)} />
+      )}
+      {passModal && (
+        <PassphraseModal
+          hasExisting={data.links.some((l) => l.password)}
+          onCancel={() => setPassModal(null)}
+          onSubmit={(pass) => { setMasterPass(pass); setPassModal(null); passModal.onSubmit(pass); }}
+        />
+      )}
+      {showPromptForm && (
+        <PromptFormModal
+          types={data.promptTypes} initial={editingPrompt}
+          onClose={() => { setShowPromptForm(false); setEditingPrompt(null); }}
+          onSubmit={savePrompt}
+        />
+      )}
+      {showPromptTypeForm && (
+        <SimpleNameModal title="Novo tipo de prompt" label="Nome do tipo" onClose={() => setShowPromptTypeForm(false)} onSubmit={addPromptType} />
+      )}
+      {renamingPromptType && (
+        <SimpleNameModal
+          title="Renomear tipo" label="Nome" initial={renamingPromptType.name} submitLabel="Salvar"
+          onClose={() => setRenamingPromptType(null)}
+          onSubmit={(name) => renamePromptType(renamingPromptType.id, name)}
+        />
+      )}
+      {showCommandForm && (
+        <CommandFormModal
+          categories={data.commandCategories} initial={editingCommand}
+          onClose={() => { setShowCommandForm(false); setEditingCommand(null); }}
+          onSubmit={saveCommand}
+        />
+      )}
+      {showCommandCatForm && (
+        <SimpleNameModal title="Nova categoria de comando" label="Nome da categoria" onClose={() => setShowCommandCatForm(false)} onSubmit={addCommandCategory} />
+      )}
+      {renamingCommandCategory && (
+        <SimpleNameModal
+          title="Renomear categoria" label="Nome" initial={renamingCommandCategory.name} submitLabel="Salvar"
+          onClose={() => setRenamingCommandCategory(null)}
+          onSubmit={(name) => renameCommandCategory(renamingCommandCategory.id, name)}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   Pequenos componentes compartilhados
+--------------------------------------------------------------- */
+function Pill({ label, active, color, onClick, onRemove, onEdit, onMoveLeft, onMoveRight }) {
+  return (
+    <span className="inline-flex items-center group/pill">
+      <button
+        onClick={onClick}
+        className="px-2.5 py-1 rounded-full text-[11px] font-mono"
+        style={{
+          background: active ? (color || BRASS) : "transparent",
+          color: active ? PAPER : PAGE_MUTED,
+          border: `1px solid ${active ? (color || BRASS) : PAGE_LINE}`,
+        }}
+      >
+        {label}
+      </button>
+      {(onMoveLeft || onMoveRight || onEdit || onRemove) && (
+        <span className="inline-flex items-center gap-0.5 ml-0.5 opacity-100 sm:opacity-0 sm:group-hover/pill:opacity-100">
+          {onMoveLeft && (
+            <button className="p-1.5 -m-0.5" onClick={(e) => { e.stopPropagation(); onMoveLeft(); }} title="Mover pra esquerda">
+              <ChevronRight size={10} style={{ color: PAGE_MUTED, transform: "rotate(180deg)" }} />
+            </button>
+          )}
+          {onMoveRight && (
+            <button className="p-1.5 -m-0.5" onClick={(e) => { e.stopPropagation(); onMoveRight(); }} title="Mover pra direita">
+              <ChevronRight size={10} style={{ color: PAGE_MUTED }} />
+            </button>
+          )}
+          {onEdit && (
+            <button className="p-1.5 -m-0.5" onClick={(e) => { e.stopPropagation(); onEdit(); }} title="Renomear">
+              <Pencil size={10} style={{ color: PAGE_MUTED }} />
+            </button>
+          )}
+          {onRemove && (
+            <button className="p-1.5 -m-0.5" onClick={(e) => { e.stopPropagation(); if (confirm(`Remover "${label}"?`)) onRemove(); }} title="Remover">
+              <X size={10} style={{ color: RUST }} />
+            </button>
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function EmptyState({ label }) {
+  return (
+    <div className="h-full flex flex-col items-center justify-center text-center py-16">
+      <Inbox size={26} style={{ color: "#86A0CC" }} className="mb-3" />
+      <p style={{ color: "#E9F0FC" }} className="text-sm">{label}</p>
+    </div>
+  );
+}
+
+function ModalShell({ onClose, children, width = 420 }) {
+  return (
+    <div className="fixed inset-0 flex items-center justify-center sm:p-4 z-50" style={{ background: "rgba(0,0,0,0.55)", backdropFilter: "blur(2px)" }} onClick={onClose}>
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: `min(${width}px, 100vw)`, maxWidth: "100vw",
+          maxHeight: "100dvh", overflowY: "auto", fontFamily: "'Inter', system-ui, sans-serif",
+        }}
+        className="glass rounded-none sm:rounded-2xl p-4 sm:p-5 text-[#FFFFFF] h-[100dvh] sm:h-auto sm:max-h-[88vh]"
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }) {
+  return (
+    <label className="block">
+      <span className="text-[11px] font-mono tracking-wide" style={{ color: "#CFE0FB" }}>{label.toUpperCase()}</span>
+      <div className="mt-1">{children}</div>
+    </label>
+  );
+}
+
+function ModalHeader({ title, onClose }) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <p style={{ fontFamily: "'Space Grotesk', sans-serif", color: PAPER }} className="font-bold">{title}</p>
+      <button onClick={onClose}><X size={16} style={{ color: "#CFE0FB" }} /></button>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------
+   Links — board de colunas
+--------------------------------------------------------------- */
+function LinkRow({ link, hasPasswords, onOpen, onEdit, onDelete, revealedValue, revealError, onReveal, onHide, onCopy, copied }) {
+  const [expanded, setExpanded] = useState(false);
+  const [imgError, setImgError] = useState(false);
+  const fav = faviconUrl(link.url);
+  return (
+    <div>
+      <div className="group flex items-center gap-2.5 px-2.5 py-2 rounded-md hover:bg-white/5">
+        {fav && !imgError ? (
+          <img src={fav} alt="" className="w-5 h-5 rounded shrink-0" onError={() => setImgError(true)} />
+        ) : (
+          <LetterAvatar label={link.title} />
+        )}
+        <a
+          href={link.url} target="_blank" rel="noopener noreferrer" onClick={onOpen}
+          title={link.notes || link.url}
+          className="flex-1 min-w-0 truncate text-sm hover:underline" style={{ color: PAPER }}
+        >
+          {link.title}
+        </a>
+        {hasPasswords && (
+          <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setExpanded((v) => !v); }} className="shrink-0 p-1.5 -m-0.5">
+            <Lock size={12} style={{ color: TEAL }} />
+          </button>
+        )}
+        <span className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1 shrink-0">
+          <button className="p-1.5 -m-0.5" onClick={(e) => { e.preventDefault(); onEdit(); }}><Pencil size={12} style={{ color: "#CFE0FB" }} /></button>
+          <button className="p-1.5 -m-0.5" onClick={(e) => { e.preventDefault(); if (confirm(`Apagar "${link.title}"?`)) onDelete(); }}><Trash2 size={12} style={{ color: "#CFE0FB" }} /></button>
+        </span>
+      </div>
+      {expanded && hasPasswords && (
+        <div className="ml-7 mr-2 mb-1.5 flex items-center gap-2 px-2.5 py-1.5 rounded" style={{ background: "rgba(76,133,121,0.12)" }}>
+          <span className="font-mono text-[11px] flex-1 truncate" style={{ color: revealedValue ? PAPER : "#CFE0FB" }}>
+            {revealedValue || "••••••••••"}
+          </span>
+          {revealError && !revealedValue && <span className="text-[9px]" style={{ color: RUST }}>senha incorreta</span>}
+          <button onClick={revealedValue ? onHide : onReveal}>
+            {revealedValue ? <EyeOff size={12} style={{ color: TEAL }} /> : <Eye size={12} style={{ color: TEAL }} />}
+          </button>
+          {revealedValue && (
+            <button onClick={onCopy}>{copied ? <Check size={12} style={{ color: TEAL }} /> : <Copy size={12} style={{ color: TEAL }} />}</button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BoardColumn({
+  category, items, prints = [], subcategories = [], linksByCategory, onAddLink, onAddPrint, onViewPrint, onAddSubcategory,
+  onDeleteCategory, onRenameCategory, onMoveCategory, isFirst, isLast,
+  onOpen, onEdit, onDelete, revealed, revealError, copiedId, onReveal, onHide, onCopy,
+}) {
+  const totalCount = items.length + prints.length + subcategories.reduce((sum, s) => sum + (linksByCategory[s.id] || []).length, 0);
+  return (
+    <div className="glass ticked w-full flex flex-col rounded-2xl overflow-hidden">
+      <div className="group/head flex items-center justify-between px-3.5 py-3" style={{ borderBottom: `1px solid ${LINE}` }}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          {category.hasPasswords && <Lock size={11} style={{ color: TEAL }} className="shrink-0" />}
+          <span className="text-[13px] font-bold uppercase tracking-wide truncate" style={{ color: PAPER, fontFamily: "'Space Grotesk', sans-serif" }}>
+            {category.name}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className="font-mono text-[10px]" style={{ color: "#CFE0FB" }}>{totalCount}</span>
+          <span className="inline-flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover/head:opacity-100">
+            {onMoveCategory && !isFirst && (
+              <button className="p-1.5 -m-0.5" onClick={() => onMoveCategory(category.id, -1)} title="Mover pra esquerda">
+                <ChevronRight size={12} style={{ color: "#CFE0FB", transform: "rotate(180deg)" }} />
+              </button>
+            )}
+            {onMoveCategory && !isLast && (
+              <button className="p-1.5 -m-0.5" onClick={() => onMoveCategory(category.id, 1)} title="Mover pra direita">
+                <ChevronRight size={12} style={{ color: "#CFE0FB" }} />
+              </button>
+            )}
+            <button className="p-1.5 -m-0.5" onClick={() => onRenameCategory(category)} title="Renomear categoria"><Pencil size={11} style={{ color: "#CFE0FB" }} /></button>
+          </span>
+          <button className="p-1.5 -m-0.5" onClick={() => onDeleteCategory(category.id, category.name)} title="Excluir categoria"><X size={12} style={{ color: "#9FB6DD" }} /></button>
+        </div>
+      </div>
+      <div className="overflow-y-auto py-1.5 px-1.5 space-y-0.5" style={{ minHeight: 60, maxHeight: 420 }}>
+        {items.length === 0 && prints.length === 0 && subcategories.length === 0 && (
+          <p className="text-[11px] px-2 py-3 text-center" style={{ color: "#9FB6DD" }}>vazio</p>
+        )}
+        {items.map((link) => (
+          <LinkRow
+            key={link.id} link={link} hasPasswords={category.hasPasswords}
+            onOpen={() => onOpen(link)} onEdit={() => onEdit(link)} onDelete={() => onDelete(link.id)}
+            revealedValue={revealed[link.id]} revealError={revealError[link.id]}
+            onReveal={() => onReveal(link)} onHide={() => onHide(link.id)} onCopy={() => onCopy(link)}
+            copied={copiedId === link.id}
+          />
+        ))}
+        {prints.length > 0 && (
+          <div className="grid grid-cols-3 gap-1 px-1 pt-1.5">
+            {prints.map((p) => (
+              <button
+                key={p.id} onClick={() => onViewPrint(p)}
+                className="relative aspect-square rounded overflow-hidden group/print"
+                style={{ border: `1px solid ${LINE}` }}
+                title={p.caption || "Sem descrição"}
+              >
+                <img src={p.image} alt={p.caption || ""} className="w-full h-full object-cover" />
+                <span className="absolute inset-0 opacity-0 group-hover/print:opacity-100 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
+                  <Maximize2 size={14} color="#FFFFFF" />
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
+        {subcategories.map((sub) => (
+          <div key={sub.id} className="mt-2 rounded-md" style={{ background: INK, border: `1px solid ${LINE}` }}>
+            <div className="group/sub flex items-center justify-between px-2 py-1.5">
+              <div className="flex items-center gap-1 min-w-0">
+                {sub.hasPasswords && <Lock size={9} style={{ color: TEAL }} className="shrink-0" />}
+                <span className="text-[11px] font-bold uppercase tracking-wide truncate" style={{ color: "#E9F0FC" }}>{sub.name}</span>
+              </div>
+              <span className="flex items-center gap-1 shrink-0">
+                <span className="font-mono text-[9px]" style={{ color: "#9FB6DD" }}>{(linksByCategory[sub.id] || []).length}</span>
+                <span className="inline-flex items-center gap-0.5 opacity-100 sm:opacity-0 sm:group-hover/sub:opacity-100">
+                  <button className="p-1.5 -m-0.5" onClick={() => onRenameCategory(sub)} title="Renomear"><Pencil size={9} style={{ color: "#CFE0FB" }} /></button>
+                  <button className="p-1.5 -m-0.5" onClick={() => onDeleteCategory(sub.id, sub.name)} title="Excluir"><X size={10} style={{ color: "#9FB6DD" }} /></button>
+                </span>
+              </span>
+            </div>
+            <div className="px-1 pb-1 space-y-0.5">
+              {(linksByCategory[sub.id] || []).length === 0 && (
+                <p className="text-[10px] px-2 py-1.5 text-center" style={{ color: "#86A0CC" }}>vazio</p>
+              )}
+              {(linksByCategory[sub.id] || []).map((link) => (
+                <LinkRow
+                  key={link.id} link={link} hasPasswords={sub.hasPasswords}
+                  onOpen={() => onOpen(link)} onEdit={() => onEdit(link)} onDelete={() => onDelete(link.id)}
+                  revealedValue={revealed[link.id]} revealError={revealError[link.id]}
+                  onReveal={() => onReveal(link)} onHide={() => onHide(link.id)} onCopy={() => onCopy(link)}
+                  copied={copiedId === link.id}
+                />
+              ))}
+              <button onClick={() => onAddLink(sub.id)} className="text-left px-2 py-1 text-[11px] font-mono" style={{ color: BRASS }}>
+                + link
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex items-center flex-wrap" style={{ borderTop: `1px solid ${LINE}` }}>
+        <button onClick={() => onAddLink(category.id)} className="flex-1 text-left px-3 py-2.5 text-[12px] font-mono" style={{ color: BRASS }}>
+          + link
+        </button>
+        <button onClick={() => onAddPrint(category.id)} className="px-3 py-2.5 text-[12px] font-mono flex items-center gap-1" style={{ color: "#CFE0FB", borderLeft: `1px solid ${LINE}` }} title="Novo print">
+          <ImagePlus size={12} /> print
+        </button>
+        <button onClick={onAddSubcategory} className="px-3 py-2.5 text-[12px] font-mono" style={{ color: "#CFE0FB", borderLeft: `1px solid ${LINE}` }} title="Nova subcategoria">
+          + sub
+        </button>
+      </div>
+
+    </div>
+  );
+}
+
+function PrintFormModal({ categories, initial, defaultCategoryId, onClose, onSubmit }) {
+  const [categoryId, setCategoryId] = useState(initial?.categoryId || defaultCategoryId || categories[0]?.id);
+  const [caption, setCaption] = useState(initial?.caption || "");
+  const [image, setImage] = useState(initial?.image || null);
+  const [preview, setPreview] = useState(initial?.image || null);
+  const [processing, setProcessing] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleFile(file) {
+    if (!file) return;
+    setProcessing(true);
+    setError("");
+    try {
+      const compressed = await compressImage(file);
+      setImage(compressed);
+      setPreview(compressed);
+    } catch (err) {
+      setError(err?.message || "Não foi possível processar essa imagem. Tenta outro arquivo.");
+    } finally {
+      setProcessing(false);
+    }
+  }
+
+  function handleSubmit() {
+    if (!image || !categoryId) return;
+    onSubmit({ categoryId, caption: caption.trim(), image });
+  }
+
+  return (
+    <ModalShell onClose={onClose} width={440}>
+      <ModalHeader title={initial ? "Editar print" : "Novo print"} onClose={onClose} />
+      <div className="space-y-3">
+        <Field label="Imagem">
+          {preview ? (
+            <div className="relative rounded overflow-hidden" style={{ border: `1px solid ${LINE}` }}>
+              <img src={preview} alt="" className="w-full max-h-52 object-contain" style={{ background: INK }} />
+              <label className="absolute bottom-2 right-2 px-2.5 py-1 rounded text-[11px] font-mono cursor-pointer" style={{ background: PANEL, border: `1px solid ${LINE}`, color: BRASS }}>
+                trocar
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files[0])} />
+              </label>
+            </div>
+          ) : (
+            <label
+              className="flex flex-col items-center justify-center gap-1.5 py-8 rounded cursor-pointer"
+              style={{ border: `1px dashed ${LINE}`, color: "#CFE0FB" }}
+            >
+              <ImagePlus size={18} />
+              <span className="text-xs font-mono">{processing ? "processando…" : "escolher imagem"}</span>
+              <input type="file" accept="image/*" className="hidden" onChange={(e) => handleFile(e.target.files[0])} />
+            </label>
+          )}
+          {error && <p className="text-xs mt-1" style={{ color: RUST }}>{error}</p>}
+        </Field>
+        <Field label="Categoria">
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={inputStyle}>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.parentId ? `— ${c.name}` : c.name}</option>)}
+          </select>
+        </Field>
+        <Field label="O que é isso (explique pra você mesmo no futuro)">
+          <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={3} placeholder="ex: referência de layout pra usar num criativo de..." style={{ ...inputStyle, resize: "none" }} />
+        </Field>
+        <button
+          type="button" onClick={handleSubmit} disabled={!image || processing}
+          className="w-full py-2.5 rounded font-medium text-sm mt-2"
+          style={{ background: image && !processing ? BRASS : LINE, color: image && !processing ? PAPER : "#CFE0FB" }}
+        >
+          {initial ? "Salvar alterações" : "Guardar print"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function PrintViewerModal({ print, categoryName, onClose, onEdit, onDelete, onDownload }) {
+  return (
+    <ModalShell onClose={onClose} width={520}>
+      <ModalHeader title={categoryName || "Print"} onClose={onClose} />
+      <img src={print.image} alt="" className="w-full rounded mb-3" style={{ background: INK, border: `1px solid ${LINE}`, maxHeight: "55vh", objectFit: "contain" }} />
+      {print.caption && <p className="text-sm leading-relaxed mb-4" style={{ color: "#E9F0FC" }}>{print.caption}</p>}
+      <div className="flex items-center gap-2">
+        <button onClick={onDownload} className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-mono" style={{ border: `1px solid ${LINE}`, color: "#DCE8FB" }}>
+          <Download size={13} /> baixar
+        </button>
+        <button onClick={onEdit} className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-mono" style={{ border: `1px solid ${LINE}`, color: "#DCE8FB" }}>
+          <Pencil size={13} /> editar
+        </button>
+        <button
+          onClick={() => confirm("Apagar esse print?") && onDelete()}
+          className="flex items-center gap-1.5 px-3 py-2 rounded text-xs font-mono ml-auto"
+          style={{ border: `1px solid ${LINE}`, color: RUST }}
+        >
+          <Trash2 size={13} /> apagar
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function LinkFormModal({ categories, initial, prefill, defaultCategoryId, onClose, onSubmit, requestPassphrase }) {
+  const [title, setTitle] = useState(initial?.title || prefill?.title || "");
+  const [url, setUrl] = useState(initial?.url || prefill?.url || "");
+  const [notes, setNotes] = useState(initial?.notes || "");
+  const [categoryId, setCategoryId] = useState(initial?.categoryId || defaultCategoryId || categories[0]?.id);
+  const [tagsText, setTagsText] = useState((initial?.tags || []).join(", "));
+  const [password, setPassword] = useState("");
+  const [passwordTouched, setPasswordTouched] = useState(false);
+  const cat = categories.find((c) => c.id === categoryId);
+
+  function handleSubmit() {
+    if (!title.trim() || !url.trim()) return;
+    const tags = [...new Set(tagsText.split(",").map((t) => t.trim().toLowerCase()).filter(Boolean))];
+    const go = () => onSubmit({
+      title: title.trim(), url: url.trim(), notes: notes.trim(), categoryId, tags,
+      categoryHasPasswords: cat?.hasPasswords, password, passwordTouched,
+    });
+    if (cat?.hasPasswords && passwordTouched && password) requestPassphrase(() => go());
+    else go();
+  }
+  function onKeyDown(e) {
+    if (e.key === "Enter" && e.target.tagName !== "TEXTAREA") { e.preventDefault(); handleSubmit(); }
+  }
+
+  return (
+    <ModalShell onClose={onClose}>
+      <ModalHeader title={initial ? "Editar link" : "Novo link"} onClose={onClose} />
+      <div onKeyDown={onKeyDown} className="space-y-3">
+        <Field label="Título"><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} /></Field>
+        <Field label="URL"><input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" style={inputStyle} /></Field>
+        <Field label="Categoria">
+          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={inputStyle}>
+            {categories.map((c) => <option key={c.id} value={c.id}>{c.parentId ? `— ${c.name}` : c.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Notas (opcional)"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} style={{ ...inputStyle, resize: "none" }} /></Field>
+        <Field label="Tags (separadas por vírgula, opcional)"><input value={tagsText} onChange={(e) => setTagsText(e.target.value)} placeholder="ex: urgente, referência" style={inputStyle} /></Field>
+        {cat?.hasPasswords && (
+          <Field label={initial?.password ? "Nova senha (deixe em branco para manter a atual)" : "Senha"}>
+            <input type="password" value={password} onChange={(e) => { setPassword(e.target.value); setPasswordTouched(true); }} style={inputStyle} />
+          </Field>
+        )}
+        <button type="button" onClick={handleSubmit} className="w-full py-2.5 rounded font-medium text-sm mt-2" style={{ background: PAPER, color: BRASS, border: `1px solid ${PAGE_LINE}` }}>
+          {initial ? "Salvar alterações" : "Adicionar ao cofre"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function CategoryFormModal({ topCategories, defaultParentId, onClose, onSubmit }) {
+  const [name, setName] = useState("");
+  const [hasPasswords, setHasPasswords] = useState(false);
+  const [parentId, setParentId] = useState(defaultParentId || "");
+
+  function handleSubmit() {
+    if (!name.trim()) return;
+    onSubmit(name.trim(), hasPasswords, parentId || null);
+  }
+
+  return (
+    <ModalShell onClose={onClose} width={360}>
+      <ModalHeader title={defaultParentId ? "Nova subcategoria" : "Nova categoria"} onClose={onClose} />
+      <div onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleSubmit(); } }} className="space-y-3">
+        <Field label="Nome"><input autoFocus value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} /></Field>
+        {topCategories && topCategories.length > 0 && (
+          <Field label="Categoria pai (opcional — deixe em branco pra criar como categoria principal)">
+            <select value={parentId} onChange={(e) => setParentId(e.target.value)} style={inputStyle}>
+              <option value="">— nenhuma (categoria principal) —</option>
+              {topCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </Field>
+        )}
+        <label className="flex items-center gap-2 text-xs" style={{ color: "#E9F0FC" }}>
+          <input type="checkbox" checked={hasPasswords} onChange={(e) => setHasPasswords(e.target.checked)} />
+          Os links desta categoria vão guardar senha
+        </label>
+        <button type="button" onClick={handleSubmit} className="w-full py-2.5 rounded font-medium text-sm mt-2" style={{ background: PAPER, color: BRASS, border: `1px solid ${PAGE_LINE}` }}>Criar categoria</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function PassphraseModal({ hasExisting, onCancel, onSubmit }) {
+  const [value, setValue] = useState("");
+  return (
+    <ModalShell onClose={onCancel} width={380}>
+      <div className="flex items-center gap-2 mb-3">
+        <ShieldCheck size={16} style={{ color: TEAL }} />
+        <p style={{ fontFamily: "'Space Grotesk', sans-serif", color: PAPER }} className="font-bold">Senha-mestra</p>
+      </div>
+      <p className="text-xs mb-3" style={{ color: "#E9F0FC" }}>
+        {hasExisting
+          ? "Digite a senha-mestra que você já usa neste cofre para ler ou gravar senhas."
+          : "Escolha uma senha-mestra. Ela criptografa cada senha guardada aqui e nunca fica salva — só existe nesta sessão."}
+      </p>
+      <div onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (value) onSubmit(value); } }} className="space-y-3">
+        <input autoFocus type="password" value={value} onChange={(e) => setValue(e.target.value)} style={inputStyle} />
+        <p className="text-[10px] font-mono" style={{ color: RUST }}>Não há recuperação: se você esquecer, as senhas guardadas ficam ilegíveis.</p>
+        <button type="button" onClick={() => { if (value) onSubmit(value); }} className="w-full py-2.5 rounded font-medium text-sm" style={{ background: TEAL, color: INK }}>Confirmar</button>
+      </div>
+    </ModalShell>
+  );
+}
+
+function BookmarkletModal({ artifactUrl, onSaveUrl, onClose }) {
+  const [urlInput, setUrlInput] = useState(artifactUrl);
+  const [copied, setCopied] = useState(false);
+  const ready = urlInput.trim().length > 0;
+  const bookmarkletCode = ready
+    ? `javascript:(function(){var b='${urlInput.trim()}';var u=encodeURIComponent(location.href);var t=encodeURIComponent(document.title);window.open(b+(b.indexOf('?')>-1?'&':'?')+'add=1&url='+u+'&title='+t,'_blank');})();`
+    : "";
+  function copyCode() { navigator.clipboard.writeText(bookmarkletCode); setCopied(true); setTimeout(() => setCopied(false), 1400); }
+  return (
+    <ModalShell onClose={onClose} width={440}>
+      <ModalHeader title="Captura rápida" onClose={onClose} />
+      <ol className="space-y-3 text-xs" style={{ color: "#E9F0FC" }}>
+        <li>
+          <span className="font-mono" style={{ color: BRASS }}>1.</span> Cole aqui o link permanente deste cofre (o endereço claude.ai/artifact/… que você vê quando abre esta página):
+          <input value={urlInput} onChange={(e) => setUrlInput(e.target.value)} placeholder="https://claude.ai/artifact/…" style={{ ...inputStyle, marginTop: 6 }} />
+        </li>
+        <li><span className="font-mono" style={{ color: BRASS }}>2.</span> Arraste o botão abaixo para a barra de favoritos (ou copie o código):</li>
+      </ol>
+      <div className="mt-3 flex items-center gap-2">
+        <a
+          href={ready ? bookmarkletCode : undefined} onClick={(e) => !ready && e.preventDefault()}
+          className="flex-1 text-center py-2.5 rounded font-medium text-sm"
+          style={{ background: ready ? TEAL : LINE, color: ready ? INK : "#CFE0FB", cursor: ready ? "grab" : "not-allowed" }}
+        >
+          <BookmarkPlus size={14} className="inline mr-1.5 -mt-0.5" /> Adicionar ao Cofre
+        </a>
+        <button onClick={copyCode} disabled={!ready} className="px-3 py-2.5 rounded" style={{ border: `1px solid ${LINE}`, opacity: ready ? 1 : 0.4 }} title="Copiar código">
+          {copied ? <Check size={14} style={{ color: TEAL }} /> : <ClipboardCopy size={14} style={{ color: "#DCE8FB" }} />}
+        </button>
+      </div>
+      <p className="text-[10px] font-mono mt-3" style={{ color: "#CFE0FB" }}>
+        Ao clicar no favorito em qualquer página, o cofre abre com o link já preenchido na categoria "A rever".
+      </p>
+      <button onClick={() => { onSaveUrl(urlInput.trim()); onClose(); }} disabled={!ready} className="w-full py-2 rounded font-medium text-sm mt-4" style={{ background: ready ? BRASS : LINE, color: ready ? PAPER : "#CFE0FB" }}>
+        Salvar link do cofre
+      </button>
+    </ModalShell>
+  );
+}
+
+/* ---------------------------------------------------------------
+   Prompts
+--------------------------------------------------------------- */
+function PromptCard({ prompt, typeName, typeColor, expanded, onToggle, onEdit, onDelete, onCopy, copied }) {
+  return (
+    <div className="glass ticked rounded-2xl mb-2.5 overflow-hidden">
+      <div className="flex items-center gap-2 px-4 py-3 cursor-pointer" onClick={onToggle} title={prompt.description || "Sem descrição"}>
+        {expanded ? <ChevronDown size={14} style={{ color: "#CFE0FB" }} /> : <ChevronRight size={14} style={{ color: "#CFE0FB" }} />}
+        <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: PAPER }}>{prompt.title}</span>
+        <span className="px-2 py-0.5 rounded-full text-[10px] font-mono shrink-0" style={{ background: `${typeColor}22`, color: typeColor, border: `1px solid ${typeColor}66` }}>
+          {typeName}
+        </span>
+        <span className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+          <button className="p-1.5 -m-0.5" onClick={onEdit}><Pencil size={12} style={{ color: "#CFE0FB" }} /></button>
+          <button className="p-1.5 -m-0.5" onClick={() => confirm(`Apagar "${prompt.title}"?`) && onDelete()}><Trash2 size={12} style={{ color: "#CFE0FB" }} /></button>
+        </span>
+      </div>
+      {expanded && (
+        <div className="px-4 pb-4 space-y-2.5" style={{ borderTop: `1px dashed ${LINE}` }}>
+          {prompt.description && <p className="text-xs pt-3 leading-relaxed" style={{ color: "#E9F0FC" }}>{prompt.description}</p>}
+          <pre className="text-[12px] font-mono whitespace-pre-wrap p-3 rounded" style={{ background: INK, border: `1px solid ${LINE}`, color: "#DCE8FB", maxHeight: 220, overflowY: "auto" }}>
+            {prompt.content}
+          </pre>
+          <button onClick={onCopy} className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium" style={{ background: PAPER, color: BRASS, border: `1px solid ${PAGE_LINE}` }}>
+            {copied ? <><Check size={12} /> copiado</> : <><Copy size={12} /> copiar prompt</>}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PromptFormModal({ types, initial, onClose, onSubmit }) {
+  const [title, setTitle] = useState(initial?.title || "");
+  const [typeId, setTypeId] = useState(initial?.typeId || types[0]?.id || "");
+  const [description, setDescription] = useState(initial?.description || "");
+  const [content, setContent] = useState(initial?.content || "");
+
+  function handleSubmit() {
+    if (!title.trim() || !content.trim() || !typeId) return;
+    onSubmit({ title: title.trim(), typeId, description: description.trim(), content: content.trim() });
+  }
+
+  return (
+    <ModalShell onClose={onClose} width={480}>
+      <ModalHeader title={initial ? "Editar prompt" : "Novo prompt"} onClose={onClose} />
+      <div className="space-y-3">
+        <Field label="Título"><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} /></Field>
+        <Field label="Tipo">
+          {types.length === 0 ? (
+            <p className="text-xs" style={{ color: RUST }}>Crie um tipo antes de adicionar um prompt.</p>
+          ) : (
+            <select value={typeId} onChange={(e) => setTypeId(e.target.value)} style={inputStyle}>
+              {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="Quando / como usar (aparece ao passar o mouse ou abrir)">
+          <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} placeholder="ex: usar para brief inicial de campanha, antes do roteiro" style={{ ...inputStyle, resize: "none" }} />
+        </Field>
+        <Field label="Conteúdo do prompt">
+          <textarea value={content} onChange={(e) => setContent(e.target.value)} rows={6} style={{ ...inputStyle, resize: "vertical", fontFamily: "'IBM Plex Mono', monospace" }} />
+        </Field>
+        <button type="button" onClick={handleSubmit} disabled={types.length === 0} className="w-full py-2.5 rounded font-medium text-sm mt-2" style={{ background: types.length ? BRASS : LINE, color: types.length ? PAPER : "#CFE0FB" }}>
+          {initial ? "Salvar alterações" : "Adicionar prompt"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ---------------------------------------------------------------
+   Comandos
+--------------------------------------------------------------- */
+function CommandRow({ index, command, onCopy, copied, onEdit, onDelete }) {
+  return (
+    <div
+      className="group flex flex-col sm:grid sm:grid-cols-[190px_1fr_auto] sm:items-center gap-1 sm:gap-4 px-3 py-3 cursor-pointer rounded"
+      style={{ borderBottom: `1px solid ${LINE}` }}
+      onClick={onCopy}
+    >
+      <div className="flex items-center gap-2">
+        <span className="font-mono text-xs shrink-0" style={{ color: "#9FB6DD", minWidth: 22 }}>{index}</span>
+        <span className="font-mono text-sm font-medium truncate" style={{ color: TEAL }}>{command.command}</span>
+      </div>
+      <div className="min-w-0 pl-8 sm:pl-0">
+        <p className="text-sm truncate" style={{ color: PAPER }}>{command.description}</p>
+        {command.subdescription && <p className="text-xs truncate" style={{ color: "#CFE0FB" }}>{command.subdescription}</p>}
+      </div>
+      <span className="flex items-center gap-2 shrink-0 self-end sm:self-auto" onClick={(e) => e.stopPropagation()}>
+        {copied && <Check size={13} style={{ color: TEAL }} />}
+        <span className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 flex items-center gap-1">
+          <button className="p-1.5 -m-0.5" onClick={onEdit}><Pencil size={12} style={{ color: "#CFE0FB" }} /></button>
+          <button className="p-1.5 -m-0.5" onClick={() => confirm(`Apagar "${command.command}"?`) && onDelete()}><Trash2 size={12} style={{ color: "#CFE0FB" }} /></button>
+        </span>
+      </span>
+    </div>
+  );
+}
+
+function CommandFormModal({ categories, initial, onClose, onSubmit }) {
+  const [command, setCommand] = useState(initial?.command || "");
+  const [categoryId, setCategoryId] = useState(initial?.categoryId || categories[0]?.id || "");
+  const [description, setDescription] = useState(initial?.description || "");
+  const [subdescription, setSubdescription] = useState(initial?.subdescription || "");
+
+  function handleSubmit() {
+    if (!command.trim() || !description.trim() || !categoryId) return;
+    onSubmit({ command: command.trim(), categoryId, description: description.trim(), subdescription: subdescription.trim() });
+  }
+
+  return (
+    <ModalShell onClose={onClose} width={440}>
+      <ModalHeader title={initial ? "Editar comando" : "Novo comando"} onClose={onClose} />
+      <div className="space-y-3">
+        <Field label="Comando"><input autoFocus value={command} onChange={(e) => setCommand(e.target.value)} placeholder="/exemplo" style={{ ...inputStyle, fontFamily: "'IBM Plex Mono', monospace" }} /></Field>
+        <Field label="Categoria">
+          {categories.length === 0 ? (
+            <p className="text-xs" style={{ color: RUST }}>Crie uma categoria antes de adicionar um comando.</p>
+          ) : (
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} style={inputStyle}>
+              {categories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+        </Field>
+        <Field label="O que faz"><input value={description} onChange={(e) => setDescription(e.target.value)} style={inputStyle} /></Field>
+        <Field label="Detalhe extra (opcional)"><input value={subdescription} onChange={(e) => setSubdescription(e.target.value)} style={inputStyle} /></Field>
+        <button type="button" onClick={handleSubmit} disabled={categories.length === 0} className="w-full py-2.5 rounded font-medium text-sm mt-2" style={{ background: categories.length ? BRASS : LINE, color: categories.length ? PAPER : "#CFE0FB" }}>
+          {initial ? "Salvar alterações" : "Adicionar comando"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ---------------------------------------------------------------
+   Modal genérico para "adicionar só um nome" (tipos e categorias)
+--------------------------------------------------------------- */
+function SimpleNameModal({ title, label, initial, submitLabel, onClose, onSubmit }) {
+  const [name, setName] = useState(initial || "");
+  return (
+    <ModalShell onClose={onClose} width={340}>
+      <ModalHeader title={title} onClose={onClose} />
+      <div onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (name.trim()) onSubmit(name.trim()); } }} className="space-y-3">
+        <Field label={label}><input autoFocus value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} /></Field>
+        <button type="button" onClick={() => { if (name.trim()) onSubmit(name.trim()); }} className="w-full py-2.5 rounded font-medium text-sm mt-2" style={{ background: PAPER, color: BRASS, border: `1px solid ${PAGE_LINE}` }}>
+          {submitLabel || "Criar"}
+        </button>
+      </div>
+    </ModalShell>
+  );
+}
+
+/* ---------------------------------------------------------------
+   Firebase (Auth Google + Firestore) e porta de entrada
+--------------------------------------------------------------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyDWeO83v5jQUZYX897CDN3ZdebMDKQmK_E",
+  authDomain: "cofre-luis.firebaseapp.com",
+  projectId: "cofre-luis",
+  storageBucket: "cofre-luis.firebasestorage.app",
+  messagingSenderId: "2010607673",
+  appId: "1:2010607673:web:da96a13a5b03a52b8d5de8"
+};
+firebase.initializeApp(firebaseConfig);
+const fbAuth = firebase.auth();
+const fbDb = firebase.firestore();
+const googleProvider = new firebase.auth.GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: "select_account" });
+
+function Gate({ children }) {
+  return (
+    <div style={{ background: "#F7F8FA", fontFamily: "'Inter', system-ui, sans-serif" }} className="w-full min-h-screen flex items-center justify-center p-6">
+      <div className="glass rounded-2xl p-6 w-full" style={{ maxWidth: 360, color: "#FFFFFF" }}>{children}</div>
+    </div>
+  );
+}
+
+function App() {
+  const [user, setUser] = useState(undefined);
+  const [access, setAccess] = useState("checking");
+  const [err, setErr] = useState("");
+
+  useEffect(() => fbAuth.onAuthStateChanged((u) => setUser(u || null)), []);
+
+  useEffect(() => {
+    if (!user) return;
+    setAccess("checking");
+    fbDb.doc("meta/init").get().then(() => setAccess("ok")).catch((e) => {
+      setAccess(e && e.code === "permission-denied" ? "denied" : "error");
+    });
+  }, [user && user.uid]);
+
+  async function login() {
+    setErr("");
+    try {
+      await fbAuth.signInWithPopup(googleProvider);
+    } catch (e) {
+      const c = e && e.code;
+      if (c === "auth/popup-blocked" || c === "auth/operation-not-supported-in-this-environment") {
+        try { await fbAuth.signInWithRedirect(googleProvider); } catch (e2) { setErr(e2.message || "Falha no login."); }
+      } else if (c !== "auth/popup-closed-by-user" && c !== "auth/cancelled-popup-request") {
+        setErr((e && e.message) || "Falha no login.");
+      }
+    }
+  }
+
+  const btn = { background: "#FFFFFF", color: "#0A1C3F" };
+  if (user === undefined) {
+    return <Gate><p className="font-mono text-xs tracking-widest text-center">CARREGANDO…</p></Gate>;
+  }
+  if (!user) {
+    return (
+      <Gate>
+        <p style={{ fontFamily: "'Space Grotesk', sans-serif" }} className="text-xl font-bold mb-1">Cofre</p>
+        <p className="text-xs mb-5" style={{ color: "#CFE0FB" }}>Acesso privado. Entre com a sua conta Google.</p>
+        <button onClick={login} className="w-full py-2.5 rounded font-medium text-sm" style={btn}>Entrar com Google</button>
+        {err && <p className="text-[11px] font-mono mt-3" style={{ color: "#FF8A7A" }}>{err}</p>}
+      </Gate>
+    );
+  }
+  if (access === "checking") {
+    return <Gate><p className="font-mono text-xs tracking-widest text-center">ABRINDO O COFRE…</p></Gate>;
+  }
+  if (access !== "ok") {
+    return (
+      <Gate>
+        <p className="font-bold mb-1">{access === "denied" ? "Conta sem permissão" : "Não foi possível abrir"}</p>
+        <p className="text-xs mb-4" style={{ color: "#CFE0FB" }}>
+          {access === "denied" ? `A conta ${user.email} não tem acesso a este cofre.` : "Falha de conexão com o banco. Tente de novo."}
+        </p>
+        <button onClick={() => fbAuth.signOut()} className="w-full py-2.5 rounded font-medium text-sm" style={btn}>Sair e trocar de conta</button>
+      </Gate>
+    );
+  }
+  return <Vault key={user.uid} onSignOut={() => fbAuth.signOut()} />;
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
